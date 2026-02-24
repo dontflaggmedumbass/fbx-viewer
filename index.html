@@ -2,117 +2,97 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Encryption Visualizer</title>
+    <title>How Encryption Works</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 800px; margin: auto; background-color: #f4f7f6; }
-        .container { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        textarea, input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-family: monospace; }
-        button { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px; }
-        button:hover { background: #218838; }
-        .log-window { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; height: 300px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 13px; margin-top: 20px; border-left: 5px solid #007acc; }
-        .log-entry { margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 4px; }
-        .step { color: #569cd6; font-weight: bold; }
-        .data { color: #ce9178; word-break: break-all; }
-        .highlight { color: #b5cea8; }
+        body { font-family: 'Courier New', monospace; background: #0d1117; color: #c9d1d9; padding: 20px; line-height: 1.4; }
+        .logic-card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 20px; margin-bottom: 20px; }
+        .input-group { margin-bottom: 15px; }
+        input { background: #0d1117; border: 1px solid #30363d; color: #58a6ff; padding: 8px; width: 100%; box-sizing: border-box; }
+        button { background: #238636; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 6px; font-weight: bold; }
+        .print-out { white-space: pre-wrap; color: #8b949e; font-size: 13px; }
+        .label { color: #f0883e; font-weight: bold; }
+        .value { color: #79c0ff; }
+        .math { color: #ff7b72; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Step-by-Step Encrypter</h2>
-    
-    <label>1. Content to Hide (URL):</label>
-    <textarea id="plainInput" placeholder="Enter URL here...">https://google.com</textarea>
-
-    <label>2. Secret Password:</label>
-    <input type="text" id="passInput" placeholder="Password123">
-
-    <button onclick="visualizeEncryption()">Start Encryption Process</button>
-
-    <div class="log-window" id="consoleLog">
-        <div class="log-entry">--- Ready to encrypt. Click the button above. ---</div>
+<div class="logic-card">
+    <h2>Encryption Logic Printer</h2>
+    <div class="input-group">
+        <label>Secret URL:</label>
+        <input type="text" id="url" value="https://secret.com">
     </div>
-
-    <label style="margin-top:20px; display:block;">3. Final Encrypted Link:</label>
-    <input type="text" id="finalResult" readonly>
+    <div class="input-group">
+        <label>Password:</label>
+        <input type="text" id="pass" value="Password123">
+    </div>
+    <button onclick="printLogic()">Encrypt & Print Logic</button>
 </div>
+
+<div id="output" class="print-out"></div>
 
 <script>
     const b64 = {
         encode: (str) => btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
         asciiToBinary: (str) => new TextEncoder().encode(str),
+        binToHex: (bin) => Array.from(bin).map(b => b.toString(16).padStart(2, '0')).join(' '),
         binaryToBase64: (bin) => btoa(String.fromCharCode(...bin))
     };
 
-    function log(step, message, data = "") {
-        const consoleLog = document.getElementById("consoleLog");
-        const entry = document.createElement("div");
-        entry.className = "log-entry";
-        entry.innerHTML = `<span class="step">[STEP ${step}]</span> ${message} <br> <span class="data">${data}</span>`;
-        consoleLog.prepend(entry);
-    }
+    async function printLogic() {
+        const out = document.getElementById("output");
+        const urlText = document.getElementById("url").value;
+        const passText = document.getElementById("pass").value;
+        out.innerHTML = "Initializing Encryption Pipeline...\n\n";
 
-    async function visualizeEncryption() {
-        const text = document.getElementById("plainInput").value;
-        const password = document.getElementById("passInput").value;
-        document.getElementById("consoleLog").innerHTML = ""; // Clear logs
+        // 1. RAW DATA
+        out.innerHTML += `<span class="label">[1] CONVERTING TEXT TO BYTES</span>\n`;
+        const urlBytes = b64.asciiToBinary(urlText);
+        out.innerHTML += `    Plaintext: "${urlText}"\n`;
+        out.innerHTML += `    Raw Bytes (Hex): <span class="value">${b64.binToHex(urlBytes)}</span>\n\n`;
 
-        if (!text || !password) {
-            log("!", "ERROR: Missing URL or Password", "");
-            return;
-        }
+        // 2. PBKDF2
+        out.innerHTML += `<span class="label">[2] DERIVING CRYPTO KEY (PBKDF2)</span>\n`;
+        const salt = window.crypto.getRandomValues(new Uint8Array(16));
+        out.innerHTML += `    Generated Salt: <span class="value">${b64.binToHex(salt)}</span>\n`;
+        out.innerHTML += `    <span class="math">Math: PBKDF2(Password + Salt, 100,000 Rounds, SHA-256)</span>\n`;
+        
+        const rawKey = await window.crypto.subtle.importKey("raw", b64.asciiToBinary(passText), {name:"PBKDF2"}, false, ["deriveKey"]);
+        const encryptionKey = await window.crypto.subtle.deriveKey(
+            {name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256"},
+            rawKey, {name: "AES-GCM", length: 256}, false, ["encrypt"]
+        );
+        out.innerHTML += `    Result: 256-bit AES Key generated in protected memory.\n\n`;
 
-        try {
-            // STEP 1: SALT GENERATION
-            const salt = window.crypto.getRandomValues(new Uint8Array(16));
-            log(1, "Generated a unique Salt (prevents hackers using pre-computed tables)", b64.binaryToBase64(salt));
+        // 3. AES-GCM
+        out.innerHTML += `<span class="label">[3] PERFORMING AES-GCM ENCRYPTION</span>\n`;
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        out.innerHTML += `    Initialization Vector (IV): <span class="value">${b64.binToHex(iv)}</span>\n`;
+        
+        const encryptedBuffer = await window.crypto.subtle.encrypt({name: "AES-GCM", iv: iv}, encryptionKey, urlBytes);
+        const ciphertext = new Uint8Array(encryptedBuffer);
+        
+        out.innerHTML += `    <span class="math">Operation: XOR Cipher + Galois Field Multiplication (for Integrity)</span>\n`;
+        out.innerHTML += `    Encrypted Bytes: <span class="value">${b64.binToHex(ciphertext)}</span>\n\n`;
 
-            // STEP 2: KEY DERIVATION
-            log(2, "Running PBKDF2 algorithm...", "Taking password '" + password + "' and mixing with salt over 100,000 iterations to create a 256-bit key.");
-            
-            let rawKey = await window.crypto.subtle.importKey(
-                "raw", b64.asciiToBinary(password), { name: "PBKDF2" }, false, ["deriveKey"]
-            );
-
-            let encryptionKey = await window.crypto.subtle.deriveKey(
-                { name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256" },
-                rawKey, { name: "AES-GCM", length: 256 }, false, ["encrypt"]
-            );
-            log(2.1, "Key Derived Successfully", "[Object CryptoKey: Hidden for security]");
-
-            // STEP 3: IV GENERATION
-            const iv = window.crypto.getRandomValues(new Uint8Array(12));
-            log(3, "Generated random IV (Initialization Vector)", b64.binaryToBase64(iv));
-
-            // STEP 4: AES-GCM ENCRYPTION
-            log(4, "Encrypting plaintext with AES-GCM...", "Input: " + text);
-            const encryptedBuffer = await window.crypto.subtle.encrypt(
-                { name: "AES-GCM", iv: iv },
-                encryptionKey, b64.asciiToBinary(text)
-            );
-            const encryptedBase64 = b64.binaryToBase64(new Uint8Array(encryptedBuffer));
-            log(4.1, "Encryption Complete. Scrambled result:", encryptedBase64);
-
-            // STEP 5: PACKAGING
-            const params = {
-                v: "0.0.1",
-                e: encryptedBase64,
-                s: b64.binaryToBase64(salt),
-                i: b64.binaryToBase64(iv)
-            };
-            const finalString = JSON.stringify(params);
-            log(5, "Bundled all components into a JSON object", finalString);
-
-            // STEP 6: BASE64 URL FRAGMENT
-            const hash = b64.encode(finalString);
-            const finalLink = "https://jstrieb.github.io/link-lock/#" + hash;
-            document.getElementById("finalResult").value = finalLink;
-            log(6, "SUCCESS: Final link generated and ready for sharing.", "");
-
-        } catch (e) {
-            log("!", "CRITICAL ERROR", e.message);
-        }
+        // 4. PACKAGING
+        out.innerHTML += `<span class="label">[4] PACKAGING FOR URL</span>\n`;
+        const params = {
+            v: "0.0.1",
+            e: b64.binaryToBase64(ciphertext),
+            s: b64.binaryToBase64(salt),
+            i: b64.binaryToBase64(iv)
+        };
+        const json = JSON.stringify(params);
+        out.innerHTML += `    JSON Bundle: ${json}\n`;
+        
+        const finalHash = b64.encode(json);
+        out.innerHTML += `    Final Base64 Hash: <span class="value">${finalHash}</span>\n\n`;
+        out.innerHTML += `<span class="label">--- PROCESS COMPLETE ---</span>\n`;
+        out.innerHTML += `URL: https://jstrieb.github.io/link-lock/#${finalHash}`;
     }
 </script>
+
 </body>
 </html>
