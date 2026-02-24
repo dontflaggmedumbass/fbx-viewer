@@ -2,128 +2,122 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub 3D Model Viewer</title>
+    <title>Link-Lock Encrypter</title>
     <style>
-        body { margin: 0; background-color: #1a1a1a; color: white; font-family: sans-serif; overflow: hidden; }
-        #canvas-container { width: 100vw; height: 100vh; }
-        #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; }
-        #loader-info { position: absolute; bottom: 20px; width: 100%; text-align: center; color: #aaa; }
-        .controls-hint { font-size: 0.8rem; opacity: 0.7; }
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; max-width: 600px; margin: auto; }
+        input, textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; }
+        .alert { margin-top: 10px; font-weight: bold; color: #d9534f; opacity: 0; transition: opacity 0.3s; }
     </style>
 </head>
 <body>
 
-    <div id="ui">
-        <h2>3D Viewer</h2>
-        <div class="controls-hint">Rotate: Left Click | Zoom: Scroll | Pan: Right Click</div>
-    </div>
-    <div id="loader-info">Initializing Scene...</div>
+    <h2>Link-Lock Encrypter</h2>
+    
+    <label>URL / Secret Text to Hide:</label>
+    <textarea id="output" placeholder="https://example.com"></textarea>
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    <label>Password:</label>
+    <input type="password" id="password" placeholder="Enter a strong password">
+
+    <button onclick="onEncrypt()">Generate Encrypted Link</button>
+
+    <hr>
+
+    <label>Resulting Encrypted URL:</label>
+    <input type="text" id="encrypted-url" readonly onclick="this.select()">
+    
+    <div class="alert" id="status-message"></div>
+
+    <script>
+        /*******************************************************************************
+         * Base64 & Binary Helpers (The "b64" Library)
+         ******************************************************************************/
+        const b64 = {
+            decode: (str) => atob(str.replace(/-/g, "+").replace(/_/g, "/")),
+            encode: (str) => btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+            asciiToBinary: (str) => new TextEncoder().encode(str),
+            binaryToAscii: (bin) => new TextDecoder().decode(bin),
+            binaryToBase64: (bin) => btoa(String.fromCharCode(...bin)),
+            base64ToBinary: (str) => Uint8Array.from(atob(str), c => c.charCodeAt(0))
+        };
+
+        /*******************************************************************************
+         * Encryption API (Logic from Jacob Strieb)
+         ******************************************************************************/
+        const LATEST_API_VERSION = "0.0.1";
+        const apiVersions = {};
+
+        apiVersions["0.0.1"] = {
+            // Default Salt/IV if none provided
+            salt: Uint8Array.from([236, 231, 167, 249, 207, 95, 201, 235, 164, 98, 246, 26, 176, 174, 72, 249]),
+            iv: Uint8Array.from([255, 237, 148, 105, 6, 255, 123, 202, 115, 130, 16, 116]),
+
+            randomSalt: () => window.crypto.getRandomValues(new Uint8Array(16)),
+            randomIv: () => window.crypto.getRandomValues(new Uint8Array(12)),
+
+            deriveKey: async function(password, salt) {
+                let rawKey = await window.crypto.subtle.importKey(
+                    "raw", b64.asciiToBinary(password), { name: "PBKDF2" }, false, ["deriveBits", "deriveKey"]
+                );
+                return await window.crypto.subtle.deriveKey(
+                    { name: "PBKDF2", salt: salt || this.salt, iterations: 100000, hash: "SHA-256" },
+                    rawKey, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
+                );
+            },
+
+            encrypt: async function(text, password, salt, iv) {
+                let key = await this.deriveKey(password, salt);
+                return await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv || this.iv },
+                    key, b64.asciiToBinary(text)
+                );
+            }
+        };
+
+        /*******************************************************************************
+         * Main UI Function (The "Reverse" of your Decrypt code)
+         ******************************************************************************/
+        async function onEncrypt() {
+            const status = document.getElementById("status-message");
+            const plainText = document.getElementById("output").value;
+            const password = document.getElementById("password").value;
+
+            if (!plainText || !password) {
+                status.innerText = "Error: Need both text and password!";
+                status.style.opacity = 1;
+                return;
+            }
+
+            try {
+                const api = apiVersions[LATEST_API_VERSION];
+                const salt = api.randomSalt();
+                const iv = api.randomIv();
+
+                // Perform Encryption
+                const encryptedBuffer = await api.encrypt(plainText, password, salt, iv);
+                
+                // Package into the JSON format Link-Lock expects
+                const params = {
+                    v: LATEST_API_VERSION,
+                    e: b64.binaryToBase64(new Uint8Array(encryptedBuffer)),
+                    s: b64.binaryToBase64(salt),
+                    i: b64.binaryToBase64(iv)
+                };
+
+                // Convert to Base64 fragment
+                const encodedParams = b64.encode(JSON.stringify(params));
+                const finalUrl = `https://jstrieb.github.io/link-lock/#${encodedParams}`;
+
+                document.getElementById("encrypted-url").value = finalUrl;
+                status.innerText = "Successfully Encrypted!";
+                status.style.opacity = 1;
+            } catch (e) {
+                status.innerText = "Encryption failed.";
+                status.style.opacity = 1;
+                console.error(e);
             }
         }
-    </script>
-
-    <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-        import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
-        import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
-
-        // --- CONFIGURATION ---
-        // Change this to your RAW GitHub URL
-        const MODEL_URL = 'https://raw.githubusercontent.com/dontflaggmedumbass/fbx-viewer/main/Soda%20Cans.FBX';
-
-        // --- SCENE SETUP ---
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x111111);
-
-        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
-        camera.position.set(0, 200, 400);
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.shadowMap.enabled = true;
-        document.body.appendChild(renderer.domElement);
-
-        // --- LIGHTING ---
-        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 2);
-        hemiLight.position.set(0, 200, 0);
-        scene.add(hemiLight);
-
-        const dirLight = new THREE.DirectionalLight(0xffffff, 2);
-        dirLight.position.set(0, 200, 100);
-        dirLight.castShadow = true;
-        scene.add(dirLight);
-
-        // Grid Floor
-        const grid = new THREE.GridHelper(2000, 20, 0x000000, 0x000000);
-        grid.material.opacity = 0.2;
-        grid.material.transparent = true;
-        scene.add(grid);
-
-        // --- CONTROLS ---
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.target.set(0, 100, 0);
-
-        // --- LOADING LOGIC ---
-        const statusEl = document.getElementById('loader-info');
-        const manager = new THREE.LoadingManager();
-
-        manager.onStart = () => statusEl.innerText = 'Downloading from GitHub...';
-        manager.onProgress = (url, itemsLoaded, itemsTotal) => {
-            statusEl.innerText = `Loading: ${Math.round((itemsLoaded / itemsTotal) * 100)}%`;
-        };
-        manager.onLoad = () => statusEl.innerText = 'Model Loaded';
-        manager.onError = (url) => statusEl.innerText = 'Error loading model from: ' + url;
-
-        // Determine Loader
-        const extension = MODEL_URL.split('.').pop().toLowerCase();
-        let loader;
-
-        if (extension === 'fbx') {
-            loader = new FBXLoader(manager);
-        } else if (extension === 'obj') {
-            loader = new OBJLoader(manager);
-        }
-
-        if (loader) {
-            loader.load(MODEL_URL, (object) => {
-                // Auto-center and Scale logic
-                const box = new THREE.Box3().setFromObject(object);
-                const size = box.getSize(new THREE.Vector3());
-                const center = box.getCenter(new THREE.Vector3());
-
-                // Adjust position so it sits on the grid
-                object.position.x += (object.position.x - center.x);
-                object.position.y += (object.position.y - box.min.y);
-                object.position.z += (object.position.z - center.z);
-
-                scene.add(object);
-            });
-        }
-
-        // --- ANIMATION LOOP ---
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update();
-            renderer.render(scene, camera);
-        }
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        animate();
     </script>
 </body>
 </html>
