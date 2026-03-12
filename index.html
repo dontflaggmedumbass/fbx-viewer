@@ -1,90 +1,272 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Random Chaos Generator</title>
-    <style>
-        body {
-            background-color: #1a1a1a;
-            color: white;
-            overflow: hidden; /* Keeps the scrollbars from going nuts */
-            height: 100vh;
-            margin: 0;
-            font-family: 'Courier New', Courier, monospace;
-        }
-        #ui {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            z-index: 9999;
-            background: rgba(0,0,0,0.8);
-            padding: 15px;
-            border: 1px solid #444;
-        }
-        .chaos-obj {
-            position: absolute;
-            transition: all 0.5s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.2);
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Procedural 3D Map Generator</title>
+
+<style>
+body{
+margin:0;
+overflow:hidden;
+background:black;
+}
+
+#info{
+position:absolute;
+top:10px;
+left:10px;
+color:white;
+font-family:monospace;
+}
+</style>
+
 </head>
 <body>
 
-    <div id="ui">
-        <button onclick="spawnChaos()">ADD CHAOS</button>
-        <button onclick="startAuto()">AUTO-MODE</button>
-        <button onclick="location.reload()">NUKE EVERYTHING</button>
-        <p id="counter">Objects: 0</p>
-    </div>
+<div id="info">
+WASD = move<br>
+Mouse = look<br>
+</div>
 
-    <script>
-        let count = 0;
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/PointerLockControls.js"></script>
 
-        function spawnChaos() {
-            const obj = document.createElement('div');
-            obj.className = 'chaos-obj';
-            
-            // Random Dimensions
-            const w = Math.floor(Math.random() * 300) + 50;
-            const h = Math.floor(Math.random() * 300) + 50;
-            
-            // Random Position
-            const x = Math.floor(Math.random() * window.innerWidth);
-            const y = Math.floor(Math.random() * window.innerHeight);
-            
-            // Random Look
-            const color = `hsl(${Math.random() * 360}, 70%, 60%)`;
-            const borderRadius = Math.random() > 0.5 ? '50%' : '0%';
-            const rotation = Math.floor(Math.random() * 360);
-            
-            // Random Content
-            const icons = ['★', '☠', '☣', '♥', '⚓', '⚡', '♣', '♦'];
-            obj.innerHTML = icons[Math.floor(Math.random() * icons.length)];
-            
-            // Apply Styles
-            Object.assign(obj.style, {
-                width: `${w}px`,
-                height: `${h}px`,
-                left: `${x}px`,
-                top: `${y}px`,
-                backgroundColor: color,
-                borderRadius: borderRadius,
-                transform: `rotate(${rotation}deg)`,
-                fontSize: `${w / 3}px`
-            });
+<script>
 
-            document.body.appendChild(obj);
-            count++;
-            document.getElementById('counter').innerText = `Objects: ${count}`;
-        }
+/////////////////////////////
+// SCENE SETUP
+/////////////////////////////
 
-        function startAuto() {
-            setInterval(spawnChaos, 100); // 10 objects per second
-        }
-    </script>
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x111111);
+
+const camera = new THREE.PerspectiveCamera(
+75,
+window.innerWidth/window.innerHeight,
+0.1,
+1000
+);
+
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth,window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+/////////////////////////////
+// LIGHT
+/////////////////////////////
+
+const light = new THREE.PointLight(0xffffff,1,100);
+light.position.set(0,10,0);
+scene.add(light);
+
+/////////////////////////////
+// PLAYER CONTROLS
+/////////////////////////////
+
+const controls = new THREE.PointerLockControls(camera,document.body);
+
+document.body.addEventListener("click",()=>{
+controls.lock();
+});
+
+scene.add(controls.getObject());
+
+let moveForward=false;
+let moveBackward=false;
+let moveLeft=false;
+let moveRight=false;
+
+const velocity = new THREE.Vector3();
+const direction = new THREE.Vector3();
+
+document.addEventListener("keydown",e=>{
+switch(e.code){
+case "KeyW": moveForward=true; break;
+case "KeyS": moveBackward=true; break;
+case "KeyA": moveLeft=true; break;
+case "KeyD": moveRight=true; break;
+}
+});
+
+document.addEventListener("keyup",e=>{
+switch(e.code){
+case "KeyW": moveForward=false; break;
+case "KeyS": moveBackward=false; break;
+case "KeyA": moveLeft=false; break;
+case "KeyD": moveRight=false; break;
+}
+});
+
+/////////////////////////////
+// FLOOR
+/////////////////////////////
+
+function createFloor(x,z,w,h){
+
+const geo = new THREE.BoxGeometry(w,0.1,h);
+
+const mat = new THREE.MeshStandardMaterial({
+color:0x333333
+});
+
+const floor = new THREE.Mesh(geo,mat);
+
+floor.position.set(x,0,z);
+
+scene.add(floor);
+
+}
+
+/////////////////////////////
+// WALL
+/////////////////////////////
+
+function createWall(x,y,z,w,h,d){
+
+const geo = new THREE.BoxGeometry(w,h,d);
+
+const mat = new THREE.MeshStandardMaterial({
+color:0x888888
+});
+
+const wall = new THREE.Mesh(geo,mat);
+
+wall.position.set(x,y,z);
+
+scene.add(wall);
+
+}
+
+/////////////////////////////
+// ROOM GENERATOR
+/////////////////////////////
+
+function createRoom(x,z,width,height){
+
+createFloor(x,z,width,height);
+
+let wallHeight = 4;
+
+createWall(x-width/2,wallHeight/2,z,0.3,wallHeight,height);
+createWall(x+width/2,wallHeight/2,z,0.3,wallHeight,height);
+createWall(x,wallHeight/2,z-height/2,width,wallHeight,0.3);
+createWall(x,wallHeight/2,z+height/2,width,wallHeight,0.3);
+
+}
+
+/////////////////////////////
+// HALLWAY
+/////////////////////////////
+
+function createHallway(x,z,length,vertical){
+
+if(vertical){
+
+createFloor(x,z,3,length);
+
+createWall(x-1.5,2,z,0.3,4,length);
+createWall(x+1.5,2,z,0.3,4,length);
+
+}
+
+else{
+
+createFloor(x,z,length,3);
+
+createWall(x,2,z-1.5,length,4,0.3);
+createWall(x,2,z+1.5,length,4,0.3);
+
+}
+
+}
+
+/////////////////////////////
+// AI MAP DESIGNER
+/////////////////////////////
+
+function generateMap(){
+
+let rooms = [];
+
+for(let i=0;i<10;i++){
+
+let x = Math.floor(Math.random()*100-50);
+let z = Math.floor(Math.random()*100-50);
+
+let w = 6+Math.random()*6;
+let h = 6+Math.random()*6;
+
+createRoom(x,z,w,h);
+
+rooms.push({x,z});
+
+}
+
+for(let i=1;i<rooms.length;i++){
+
+let r1 = rooms[i-1];
+let r2 = rooms[i];
+
+let dx = r2.x - r1.x;
+let dz = r2.z - r1.z;
+
+createHallway(r1.x,r1.z+dz/2,Math.abs(dz),true);
+createHallway(r1.x+dx/2,r2.z,Math.abs(dx),false);
+
+}
+
+}
+
+generateMap();
+
+/////////////////////////////
+// PLAYER START
+/////////////////////////////
+
+camera.position.set(0,2,5);
+
+/////////////////////////////
+// GAME LOOP
+/////////////////////////////
+
+function animate(){
+
+requestAnimationFrame(animate);
+
+velocity.x -= velocity.x*0.1;
+velocity.z -= velocity.z*0.1;
+
+direction.z = Number(moveForward) - Number(moveBackward);
+direction.x = Number(moveRight) - Number(moveLeft);
+
+direction.normalize();
+
+if(moveForward || moveBackward)
+velocity.z -= direction.z*0.1;
+
+if(moveLeft || moveRight)
+velocity.x -= direction.x*0.1;
+
+controls.moveRight(-velocity.x);
+controls.moveForward(-velocity.z);
+
+renderer.render(scene,camera);
+
+}
+
+animate();
+
+/////////////////////////////
+
+window.addEventListener("resize",()=>{
+
+camera.aspect = window.innerWidth/window.innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(window.innerWidth,window.innerHeight);
+
+});
+
+</script>
+
 </body>
 </html>
