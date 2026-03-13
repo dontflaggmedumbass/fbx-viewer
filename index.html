@@ -3,163 +3,198 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>∞ TEXTURE WARP DEMO ∞</title>
+    <title>∞ DISTORTED + ANIMATED WARP ∞</title>
     <style>
         body {
             margin: 0;
             padding: 0;
             background: #000;
-            color: #0ff;
-            font-family: 'Courier New', monospace;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
             overflow: hidden;
-            text-shadow: 0 0 20px #0ff;
-        }
-        h1 {
-            font-size: 3rem;
-            letter-spacing: 8px;
-            margin-bottom: 20px;
-            animation: glow 2s infinite alternate;
+            font-family: 'Courier New', monospace;
+            color: #0ff;
+            text-align: center;
         }
         canvas {
-            border: 4px solid #0ff;
-            box-shadow: 0 0 60px #0ff, 0 0 120px #f0f;
             image-rendering: pixelated;
+            border: 6px solid #f0f;
+            box-shadow: 0 0 80px #f0f, 0 0 160px #0ff, inset 0 0 120px #ff0;
+        }
+        h1 {
+            position: absolute;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 4rem;
+            letter-spacing: 12px;
+            text-shadow: 0 0 30px #0ff, 0 0 60px #f0f;
+            animation: titlePulse 0.8s infinite alternate;
+            z-index: 10;
         }
         .info {
             position: absolute;
-            bottom: 30px;
-            font-size: 1.2rem;
-            opacity: 0.8;
+            bottom: 20px;
+            width: 100%;
+            font-size: 1.3rem;
+            opacity: 0.7;
+            text-shadow: 0 0 15px #ff0;
         }
-        @keyframes glow {
-            from { text-shadow: 0 0 20px #0ff; }
-            to { text-shadow: 0 0 80px #0ff, 0 0 140px #f0f; }
+        @keyframes titlePulse {
+            from { text-shadow: 0 0 30px #0ff, 0 0 60px #f0f; }
+            to { text-shadow: 0 0 80px #f0f, 0 0 160px #0ff, 0 0 220px #ff0; }
         }
     </style>
 </head>
 <body>
-    <h1>TEXTURE WARP</h1>
-    <canvas id="c" width="900" height="600"></canvas>
-    <div class="info">1 second → infinite liquid warp begins • pure HTML + JS • no external files</div>
+    <h1>DISTORTED WARP</h1>
+    <canvas id="c" width="1200" height="720"></canvas>
+    <div class="info">1 second → TOTAL MELTDOWN • triple distortion + color chaos + infinite animation • click = random madness</div>
 
     <script>
         const canvas = document.getElementById('c');
         const ctx = canvas.getContext('2d', { alpha: false });
-        const W = 900;
-        const H = 600;
-        canvas.width = W;
-        canvas.height = H;
+        let W = 1200, H = 720;
+        canvas.width = W; canvas.height = H;
 
-        // === CREATE INSANE PROCEDURAL TEXTURE (plasma / liquid metal style) ===
-        let baseImageData = ctx.createImageData(W, H);
-        let basePixels = baseImageData.data;
+        // === INSANE PROCEDURAL TEXTURE (plasma + noise + metal) ===
+        let originalData = ctx.createImageData(W, H);
+        let pixels = originalData.data;
 
         for (let y = 0; y < H; y++) {
             for (let x = 0; x < W; x++) {
                 const i = (y * W + x) * 4;
+                const n1 = Math.sin(x * 0.018 + y * 0.022) * 80 + Math.cos(x * 0.035 + y * 0.015) * 60;
+                const n2 = Math.sin(x * 0.029 + y * 0.011) * 75 + Math.cos(x * 0.014 + y * 0.038) * 85;
+                const n3 = Math.sin(x * 0.041 + y * 0.027) * 65 + Math.cos(x * 0.023 + y * 0.019) * 70;
 
-                // Triple sine plasma for insane color texture
-                const r = Math.sin(x * 0.023 + y * 0.017) * 90 + 
-                          Math.cos(x * 0.031 + y * 0.029) * 70 + 110;
-                const g = Math.sin(x * 0.019 + y * 0.033) * 85 + 
-                          Math.cos(x * 0.027 + y * 0.021) * 75 + 105;
-                const b = Math.sin(x * 0.037 + y * 0.014) * 95 + 
-                          Math.cos(x * 0.018 + y * 0.038) * 65 + 115;
-
-                basePixels[i]     = Math.max(0, Math.min(255, r));
-                basePixels[i + 1] = Math.max(0, Math.min(255, g));
-                basePixels[i + 2] = Math.max(0, Math.min(255, b));
-                basePixels[i + 3] = 255;
+                pixels[i]     = (n1 + 140) | 0;     // R
+                pixels[i + 1] = (n2 + 135) | 0;     // G
+                pixels[i + 2] = (n3 + 150) | 0;     // B
+                pixels[i + 3] = 255;
             }
         }
+        ctx.putImageData(originalData, 0, 0);
 
-        // Draw initial texture
-        ctx.putImageData(baseImageData, 0, 0);
-
-        // Capture original pixels for warping
-        let originalData = ctx.getImageData(0, 0, W, H);
-
-        // === WARP ENGINE (starts after exactly 1 second) ===
+        // === DISTORTION + ANIMATION ENGINE ===
         let time = 0;
         let warping = false;
-        let amp = 28;        // warp strength
-        let freq = 0.028;    // wave frequency
-        let speed = 0.085;   // animation speed
+        let amp = 42;
+        let freq = 0.031;
+        let chaos = 1.0;        // color distortion strength
+        let hueShift = 0;
 
-        function startWarp() {
-            warping = true;
-            document.querySelector('h1').textContent = "WARPING...";
-            requestAnimationFrame(animateWarp);
-        }
+        function distortFrame() {
+            const frame = ctx.createImageData(W, H);
+            const out = frame.data;
+            const src = originalData.data;
 
-        function animateWarp() {
-            if (!warping) return;
-
-            const frameData = ctx.createImageData(W, H);
-            const framePixels = frameData.data;
-            const origPixels = originalData.data;
-
-            time += speed;
+            time += 0.11;
 
             for (let y = 0; y < H; y++) {
                 for (let x = 0; x < W; x++) {
-                    // Dual-axis liquid warp (feels like molten metal / water)
-                    const dx = Math.sin(y * freq + time * 1.3) * amp +
-                               Math.cos(x * freq * 0.7 + time * 0.8) * (amp * 0.6);
+                    // TRIPLE LAYER DISTORTION (super liquid + glitch + swirl)
+                    const dx1 = Math.sin(y * freq + time * 1.4) * amp * 1.1;
+                    const dy1 = Math.cos(x * freq * 1.3 + time * 0.9) * amp * 0.9;
                     
-                    const dy = Math.cos(x * freq * 1.2 + time * 1.1) * amp +
-                               Math.sin(y * freq * 0.9 + time * 0.7) * (amp * 0.5);
+                    const dx2 = Math.sin(x * freq * 0.6 + time * 2.1) * (amp * 0.7);
+                    const dy2 = Math.cos(y * freq * 0.8 + time * 1.7) * (amp * 0.6);
+                    
+                    const dx3 = Math.sin((x + y) * 0.019 + time * 3.3) * (amp * 0.4); // swirl
 
-                    let srcX = Math.floor(x + dx);
-                    let srcY = Math.floor(y + dy);
+                    let sx = Math.floor(x + dx1 + dx2 + dx3);
+                    let sy = Math.floor(y + dy1 + dy2 + dx3 * 0.5);
 
-                    // Clamp to bounds (no black edges)
-                    srcX = Math.max(0, Math.min(W - 1, srcX));
-                    srcY = Math.max(0, Math.min(H - 1, srcY));
+                    sx = Math.max(0, Math.min(W - 1, sx));
+                    sy = Math.max(0, Math.min(H - 1, sy));
 
-                    const srcIndex = (srcY * W + srcX) * 4;
-                    const destIndex = (y * W + x) * 4;
+                    const srcIdx = (sy * W + sx) * 4;
+                    const dstIdx = (y * W + x) * 4;
 
-                    framePixels[destIndex]     = origPixels[srcIndex];
-                    framePixels[destIndex + 1] = origPixels[srcIndex + 1];
-                    framePixels[destIndex + 2] = origPixels[srcIndex + 2];
-                    framePixels[destIndex + 3] = 255;
+                    // COLOR DISTORTION + ANIMATION
+                    let r = src[srcIdx];
+                    let g = src[srcIdx + 1];
+                    let b = src[srcIdx + 2];
+
+                    // chromatic aberration + hue shift
+                    const shift = Math.sin(time * 2 + x * 0.01) * chaos * 25;
+                    r = Math.max(0, Math.min(255, r + shift * 1.3));
+                    g = Math.max(0, Math.min(255, g + Math.sin(time * 1.8) * chaos * 18));
+                    b = Math.max(0, Math.min(255, b - shift * 0.9 + hueShift));
+
+                    // extra glitch flash
+                    if (Math.random() < 0.003) {
+                        r = g = b = 255;
+                    }
+
+                    out[dstIdx]     = r;
+                    out[dstIdx + 1] = g;
+                    out[dstIdx + 2] = b;
+                    out[dstIdx + 3] = 255;
                 }
             }
 
-            ctx.putImageData(frameData, 0, 0);
-            requestAnimationFrame(animateWarp);
+            ctx.putImageData(frame, 0, 0);
+            hueShift = (hueShift + 2) % 360; // constant color breathing
         }
 
-        // === START THE MAGIC ===
+        function animate() {
+            if (!warping) return;
+            distortFrame();
+            requestAnimationFrame(animate);
+        }
+
+        // START AFTER 1 SECOND
         setTimeout(() => {
-            startWarp();
+            warping = true;
+            document.querySelector('h1').innerHTML = 'DISTORTED + ANIMATED';
+            animate();
         }, 1000);
 
-        // Bonus: click anywhere to change warp intensity (limitless fun)
+        // === INTERACTIVE MADNESS ===
         canvas.addEventListener('click', () => {
             if (warping) {
-                amp = Math.random() * 55 + 15;
-                freq = Math.random() * 0.05 + 0.015;
-                console.log('%cWARP PARAMETERS CHANGED 🔥', 'color:#f0f;font-size:20px');
+                amp = Math.random() * 70 + 25;
+                freq = Math.random() * 0.06 + 0.015;
+                chaos = Math.random() * 2.5 + 0.8;
+                console.log('%c∞ NEW DISTORTION LEVEL ∞', 'color:#ff0; font-size:24px; font-weight:bold');
             }
         });
 
-        // Double-click = reset original texture (for testing)
+        // Double click = nuclear reset + new texture
         canvas.addEventListener('dblclick', () => {
             if (warping) {
                 warping = false;
+                
+                // regenerate fresh texture
+                for (let y = 0; y < H; y++) {
+                    for (let x = 0; x < W; x++) {
+                        const i = (y * W + x) * 4;
+                        const n = Math.sin(x * 0.013 + y * 0.029 + time) * 90 + Math.cos(x * 0.037 + y * 0.017) * 75;
+                        originalData.data[i]   = (n + 150) | 0;
+                        originalData.data[i+1] = (n * 1.1 + 130) | 0;
+                        originalData.data[i+2] = (n * 0.9 + 160) | 0;
+                    }
+                }
+                
                 ctx.putImageData(originalData, 0, 0);
+                
                 setTimeout(() => {
                     warping = true;
                     time = 0;
-                    requestAnimationFrame(animateWarp);
-                }, 300);
+                    animate();
+                }, 400);
+            }
+        });
+
+        // Keyboard shortcuts (limitless control)
+        document.addEventListener('keydown', e => {
+            if (e.key === 'r') { // random everything
+                amp = Math.random() * 90 + 20;
+                freq = Math.random() * 0.07 + 0.01;
+                chaos = Math.random() * 3 + 1;
+            }
+            if (e.key === ' ') { // pause / resume
+                warping = !warping;
+                if (warping) animate();
             }
         });
     </script>
